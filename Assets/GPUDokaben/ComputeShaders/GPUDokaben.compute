@@ -1,0 +1,66 @@
+#pragma kernel MainCS
+
+// スレッドグループのスレッドサイズ
+#define ThreadBlockSize 256
+// アニメーションテーブルのサイズ
+#define AnimationLength 16
+
+// ドカベンロゴのデータ
+struct DokabenData
+{
+    // 座標
+    float3 Position;
+    // 回転
+    float2x2 Rotation;
+};
+
+// ドカベンロゴのバッファ
+RWStructuredBuffer<DokabenData> _DokabenDataBuffer;
+// アニメーションの開始位置のバッファ
+StructuredBuffer<float> _AnimationStartPositionBuffer;
+// 経過時間
+float _Time;
+// アニメーション速度
+float _AnimationSpeed;
+
+// コマ落ちアニメーション(※値自体はほぼ目コピ)
+groupshared float Animation[AnimationLength] =
+{
+    1,
+    0.9333333333333333,
+    0.8666666666666667,
+    0.8,
+    0.7333333333333333,
+    0.6666666666666666,
+    0.6,
+    0.5333333333333333,
+    0.4666666666666667,
+    0.4,
+    0.3333333333333333,
+    0.26666666666666666,
+    0.2,
+    0.13333333333333333,
+    0.06666666666666667,
+    0
+};
+
+[numthreads(ThreadBlockSize, 1, 1)]
+void MainCS(uint3 id : SV_DispatchThreadID)
+{
+    // インデックス取得
+    const unsigned int index = id.x;
+
+    // 時間の正弦を算出(ShaderLabの"_SinTime"の代わり)
+    // →序にアニメーション開始位置のバッファを加算してアニメーションをずらせるように設定
+    float sinTime = sin((_Time*_AnimationSpeed)+_AnimationStartPositionBuffer[index]);
+
+    // sinTime0~1に正規化 →0~15(コマ数分)の範囲にスケールして要素数として扱う
+    float normal = (sinTime+1)/2;
+    // X軸に90度回転
+    float rot = Animation[round(normal*(AnimationLength-1))]*radians(90);
+
+    // 回転行列
+    float sinX = sin(rot);
+    float cosX = cos(rot);
+    _DokabenDataBuffer[index].Rotation = float2x2(cosX, -sinX, sinX, cosX);
+}
